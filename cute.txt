@@ -1,0 +1,700 @@
+/* ============================================================
+   COMPLETE PL/SQL CHEAT SHEET
+   CL-2005 Database Systems Lab -- FAST-NUCES
+   covers: blocks, variables, conditionals, loops,
+           cursors, procedures, parameters, exceptions
+   ============================================================ */
+
+SET SERVEROUTPUT ON;
+
+
+/* ============================================================
+   SECTION 1: BASIC BLOCK STRUCTURE
+   ============================================================ */
+
+-- TYPE: Anonymous Block (minimal, no variables)
+BEGIN
+   DBMS_OUTPUT.PUT_LINE('Hello World');
+END;
+/
+
+-- TYPE: Anonymous Block (full structure)
+DECLARE
+   v_msg VARCHAR2(30) := 'Hello FAST';
+BEGIN
+   DBMS_OUTPUT.PUT_LINE(v_msg);
+EXCEPTION
+   WHEN OTHERS THEN
+      DBMS_OUTPUT.PUT_LINE('Error: ' || SQLERRM);
+END;
+/
+
+-- TYPE: Nested Blocks (inner shadows outer)
+DECLARE
+   num1 NUMBER := 95;
+   num2 NUMBER := 85;
+BEGIN
+   DBMS_OUTPUT.PUT_LINE('Outer num1: ' || num1);
+   DBMS_OUTPUT.PUT_LINE('Outer num2: ' || num2);
+   DECLARE
+      num1 NUMBER := 195;   -- shadows outer num1
+      num2 NUMBER := 185;   -- shadows outer num2
+   BEGIN
+      DBMS_OUTPUT.PUT_LINE('Inner num1: ' || num1);
+      DBMS_OUTPUT.PUT_LINE('Inner num2: ' || num2);
+   END;
+   -- outer values restored here
+   DBMS_OUTPUT.PUT_LINE('Outer again num1: ' || num1);
+END;
+/
+
+
+/* ============================================================
+   SECTION 2: VARIABLES AND DATA TYPES
+   ============================================================ */
+
+-- TYPE: Variable Declaration (all common types)
+DECLARE
+   v_id       INTEGER      := 101;
+   v_name     VARCHAR2(50);
+   v_salary   NUMBER(10,2) := 5000.00;
+   v_active   BOOLEAN      := TRUE;
+   v_date     DATE         := SYSDATE;
+   v_char     CHAR(1)      := 'M';
+   pi CONSTANT NUMBER      := 3.14159;
+BEGIN
+   v_name := 'Ali Ahmed';
+   DBMS_OUTPUT.PUT_LINE(v_name || ' earns ' || v_salary);
+   DBMS_OUTPUT.PUT_LINE('Date: ' || v_date);
+END;
+/
+
+-- TYPE: %TYPE anchor variable to column datatype
+DECLARE
+   v_eid   employees.EMPLOYEE_ID%TYPE;
+   v_fname employees.FIRST_NAME%TYPE;
+   v_sal   employees.SALARY%TYPE;
+BEGIN
+   SELECT EMPLOYEE_ID, FIRST_NAME, SALARY
+   INTO   v_eid, v_fname, v_sal
+   FROM   employees
+   WHERE  EMPLOYEE_ID = 100;
+   DBMS_OUTPUT.PUT_LINE(v_eid || ' - ' || v_fname || ' - ' || v_sal);
+END;
+/
+
+-- TYPE: %ROWTYPE anchor variable to entire row
+DECLARE
+   v_emp employees%ROWTYPE;
+BEGIN
+   SELECT * INTO v_emp
+   FROM   employees
+   WHERE  EMPLOYEE_ID = 100;
+   DBMS_OUTPUT.PUT_LINE(v_emp.FIRST_NAME || ' ' || v_emp.LAST_NAME);
+   DBMS_OUTPUT.PUT_LINE('Dept: '   || v_emp.DEPARTMENT_ID);
+   DBMS_OUTPUT.PUT_LINE('Salary: ' || v_emp.SALARY);
+END;
+/
+
+-- TYPE: SELECT INTO with JOIN (fetch from multiple tables)
+DECLARE
+   v_eid   employees.EMPLOYEE_ID%TYPE;
+   v_fname employees.FIRST_NAME%TYPE;
+   v_lname employees.LAST_NAME%TYPE;
+   v_dname departments.DEPARTMENT_NAME%TYPE;
+BEGIN
+   SELECT e.EMPLOYEE_ID, e.FIRST_NAME,
+          e.LAST_NAME,   d.DEPARTMENT_NAME
+   INTO   v_eid, v_fname, v_lname, v_dname
+   FROM   employees e
+   JOIN   departments d
+      ON  e.DEPARTMENT_ID = d.DEPARTMENT_ID
+   WHERE  e.EMPLOYEE_ID = 100;
+   DBMS_OUTPUT.PUT_LINE('ID:   '   || v_eid);
+   DBMS_OUTPUT.PUT_LINE('Name: '   || v_fname || ' ' || v_lname);
+   DBMS_OUTPUT.PUT_LINE('Dept: '   || v_dname);
+END;
+/
+
+-- TYPE: Arithmetic operations on variables
+DECLARE
+   a INTEGER := 10;
+   b INTEGER := 20;
+   c INTEGER;
+   f NUMBER;
+BEGIN
+   c := a + b;
+   DBMS_OUTPUT.PUT_LINE('Sum: '    || c);
+   f := 70.0 / 3.0;
+   DBMS_OUTPUT.PUT_LINE('Divide: ' || f);
+END;
+/
+
+
+/* ============================================================
+   SECTION 3: CONDITIONAL LOGIC
+   ============================================================ */
+
+-- TYPE: IF THEN (single branch)
+DECLARE
+   v_id  employees.EMPLOYEE_ID%TYPE := 100;
+   v_sal employees.SALARY%TYPE;
+BEGIN
+   SELECT SALARY INTO v_sal
+   FROM   employees WHERE EMPLOYEE_ID = v_id;
+   IF v_sal >= 5000 THEN
+      UPDATE employees
+      SET    SALARY = v_sal + 1000
+      WHERE  EMPLOYEE_ID = v_id;
+      DBMS_OUTPUT.PUT_LINE('Salary updated');
+   END IF;
+END;
+/
+
+-- TYPE: IF THEN ELSE (two branches)
+DECLARE
+   v_id  employees.EMPLOYEE_ID%TYPE := 100;
+   v_sal employees.SALARY%TYPE;
+BEGIN
+   SELECT SALARY INTO v_sal
+   FROM   employees WHERE EMPLOYEE_ID = v_id;
+   IF v_sal >= 10000 THEN
+      DBMS_OUTPUT.PUT_LINE('High earner');
+   ELSE
+      DBMS_OUTPUT.PUT_LINE('Regular earner');
+   END IF;
+END;
+/
+
+-- TYPE: IF ELSIF ELSE (multi-branch salary update)
+DECLARE
+   v_id  employees.EMPLOYEE_ID%TYPE := 100;
+   v_sal employees.SALARY%TYPE;
+BEGIN
+   SELECT SALARY INTO v_sal
+   FROM   employees WHERE EMPLOYEE_ID = v_id;
+   IF v_sal <= 15000 THEN
+      UPDATE employees SET SALARY = v_sal + 300 WHERE EMPLOYEE_ID = v_id;
+   ELSIF v_sal <= 20000 THEN
+      UPDATE employees SET SALARY = v_sal + 200 WHERE EMPLOYEE_ID = v_id;
+   ELSIF v_sal <= 25000 THEN
+      UPDATE employees SET SALARY = v_sal + 100 WHERE EMPLOYEE_ID = v_id;
+   ELSE
+      UPDATE employees SET SALARY = v_sal + 400 WHERE EMPLOYEE_ID = v_id;
+   END IF;
+   DBMS_OUTPUT.PUT_LINE('Old salary was: ' || v_sal);
+END;
+/
+
+-- TYPE: CASE Statement (searched CASE on department)
+DECLARE
+   v_id  employees.EMPLOYEE_ID%TYPE  := 100;
+   v_sal employees.SALARY%TYPE;
+   v_did employees.DEPARTMENT_ID%TYPE;
+BEGIN
+   SELECT SALARY, DEPARTMENT_ID
+   INTO   v_sal, v_did
+   FROM   employees WHERE EMPLOYEE_ID = v_id;
+   CASE
+      WHEN v_did = 80 THEN
+         UPDATE employees SET SALARY = v_sal + 100 WHERE EMPLOYEE_ID = v_id;
+      WHEN v_did = 50 THEN
+         UPDATE employees SET SALARY = v_sal + 200 WHERE EMPLOYEE_ID = v_id;
+      WHEN v_did = 40 THEN
+         UPDATE employees SET SALARY = v_sal + 300 WHERE EMPLOYEE_ID = v_id;
+      ELSE
+         DBMS_OUTPUT.PUT_LINE('No matching department');
+   END CASE;
+   DBMS_OUTPUT.PUT_LINE('Salary was: ' || v_sal);
+END;
+/
+
+-- TYPE: Nested IF (outer checks dept, inner checks salary range)
+DECLARE
+   v_id  employees.EMPLOYEE_ID%TYPE  := 100;
+   v_sal employees.SALARY%TYPE;
+   v_did employees.DEPARTMENT_ID%TYPE;
+   v_com employees.COMMISSION_PCT%TYPE;
+BEGIN
+   SELECT SALARY, DEPARTMENT_ID, COMMISSION_PCT
+   INTO   v_sal, v_did, v_com
+   FROM   employees WHERE EMPLOYEE_ID = v_id;
+   IF v_did = 90 THEN
+      IF v_sal BETWEEN 20000 AND 25000 THEN
+         UPDATE employees
+         SET    SALARY = v_sal * (1 + NVL(v_com, 0))
+         WHERE  EMPLOYEE_ID = v_id;
+      ELSIF v_sal BETWEEN 15000 AND 20000 THEN
+         UPDATE employees
+         SET    SALARY = (v_sal + 20) * (1 + NVL(v_com, 0))
+         WHERE  EMPLOYEE_ID = v_id;
+      END IF;
+   END IF;
+   IF v_did = 40 THEN
+      IF v_sal BETWEEN 10000 AND 15000 THEN
+         UPDATE employees
+         SET    SALARY = v_sal * (1 + NVL(v_com, 0))
+         WHERE  EMPLOYEE_ID = v_id;
+      ELSIF v_sal BETWEEN 5000 AND 10000 THEN
+         UPDATE employees
+         SET    SALARY = (v_sal + 20) * (1 + NVL(v_com, 0))
+         WHERE  EMPLOYEE_ID = v_id;
+      END IF;
+   END IF;
+   DBMS_OUTPUT.PUT_LINE('Processing complete');
+END;
+/
+
+
+/* ============================================================
+   SECTION 4: LOOPS
+   ============================================================ */
+
+-- TYPE: Basic LOOP with EXIT WHEN
+DECLARE
+   i NUMBER := 1;
+BEGIN
+   LOOP
+      DBMS_OUTPUT.PUT_LINE('i = ' || i);
+      i := i + 1;
+      EXIT WHEN i > 5;
+   END LOOP;
+END;
+/
+
+-- TYPE: WHILE LOOP
+DECLARE
+   i NUMBER := 1;
+BEGIN
+   WHILE i <= 5 LOOP
+      DBMS_OUTPUT.PUT_LINE('i = ' || i);
+      i := i + 1;
+   END LOOP;
+END;
+/
+
+-- TYPE: Numeric FOR LOOP (auto counter, ascending)
+BEGIN
+   FOR i IN 1..5 LOOP
+      DBMS_OUTPUT.PUT_LINE('i = ' || i);
+   END LOOP;
+END;
+/
+
+-- TYPE: Numeric FOR LOOP REVERSE (countdown)
+BEGIN
+   FOR i IN REVERSE 1..5 LOOP
+      DBMS_OUTPUT.PUT_LINE('Countdown: ' || i);
+   END LOOP;
+END;
+/
+
+-- TYPE: Cursor FOR LOOP (implicit, cleanest way to loop rows)
+BEGIN
+   FOR rec IN (
+      SELECT EMPLOYEE_ID, FIRST_NAME, SALARY
+      FROM   employees
+      WHERE  DEPARTMENT_ID = 90
+   ) LOOP
+      DBMS_OUTPUT.PUT_LINE(
+         rec.FIRST_NAME || ' earns ' || rec.SALARY
+      );
+   END LOOP;
+END;
+/
+
+-- TYPE: Nested Loops with Labels and EXIT inner
+BEGIN
+   <<outer_loop>>
+   FOR i IN 1..3 LOOP
+      <<inner_loop>>
+      FOR j IN 1..3 LOOP
+         IF j = 2 THEN
+            EXIT inner_loop;      -- exits inner loop only
+         END IF;
+         DBMS_OUTPUT.PUT_LINE('i=' || i || '  j=' || j);
+      END LOOP inner_loop;
+   END LOOP outer_loop;
+END;
+/
+
+
+/* ============================================================
+   SECTION 5: CURSORS
+   ============================================================ */
+
+-- TYPE: Implicit Cursor (SELECT INTO + SQL%ROWCOUNT)
+DECLARE
+   v_name employees.FIRST_NAME%TYPE;
+BEGIN
+   SELECT FIRST_NAME INTO v_name
+   FROM   employees
+   WHERE  EMPLOYEE_ID = 100;
+   DBMS_OUTPUT.PUT_LINE('Name: '      || v_name);
+   DBMS_OUTPUT.PUT_LINE('Rows found: ' || SQL%ROWCOUNT);
+END;
+/
+
+-- TYPE: Explicit Cursor (manual OPEN FETCH CLOSE)
+DECLARE
+   CURSOR emp_cur IS
+      SELECT FIRST_NAME, SALARY
+      FROM   employees
+      WHERE  DEPARTMENT_ID = 90;
+   v_name employees.FIRST_NAME%TYPE;
+   v_sal  employees.SALARY%TYPE;
+BEGIN
+   OPEN emp_cur;
+   LOOP
+      FETCH emp_cur INTO v_name, v_sal;
+      EXIT WHEN emp_cur%NOTFOUND;
+      DBMS_OUTPUT.PUT_LINE(v_name || ' : ' || v_sal);
+   END LOOP;
+   CLOSE emp_cur;
+END;
+/
+
+-- TYPE: Explicit Cursor with %ROWTYPE (fetch entire row)
+DECLARE
+   CURSOR emp_cur IS
+      SELECT * FROM employees WHERE DEPARTMENT_ID = 90;
+   v_emp emp_cur%ROWTYPE;
+BEGIN
+   OPEN emp_cur;
+   LOOP
+      FETCH emp_cur INTO v_emp;
+      EXIT WHEN emp_cur%NOTFOUND;
+      DBMS_OUTPUT.PUT_LINE(v_emp.FIRST_NAME || ' ' || v_emp.LAST_NAME);
+   END LOOP;
+   CLOSE emp_cur;
+END;
+/
+
+-- TYPE: Parameterized Cursor (pass value at OPEN)
+DECLARE
+   CURSOR emp_cur (p_dept NUMBER) IS
+      SELECT FIRST_NAME, SALARY
+      FROM   employees
+      WHERE  DEPARTMENT_ID = p_dept;
+   v_name employees.FIRST_NAME%TYPE;
+   v_sal  employees.SALARY%TYPE;
+BEGIN
+   OPEN emp_cur(90);     -- pass dept id here
+   LOOP
+      FETCH emp_cur INTO v_name, v_sal;
+      EXIT WHEN emp_cur%NOTFOUND;
+      DBMS_OUTPUT.PUT_LINE(v_name || ' : ' || v_sal);
+   END LOOP;
+   CLOSE emp_cur;
+END;
+/
+
+-- TYPE: Cursor Attributes demo (%FOUND %NOTFOUND %ROWCOUNT %ISOPEN)
+DECLARE
+   CURSOR emp_cur IS
+      SELECT FIRST_NAME FROM employees WHERE DEPARTMENT_ID = 90;
+   v_name employees.FIRST_NAME%TYPE;
+BEGIN
+   OPEN emp_cur;
+   DBMS_OUTPUT.PUT_LINE('Is open: ' || CASE WHEN emp_cur%ISOPEN THEN 'YES' ELSE 'NO' END);
+   FETCH emp_cur INTO v_name;
+   DBMS_OUTPUT.PUT_LINE('Found: '    || CASE WHEN emp_cur%FOUND    THEN 'YES' ELSE 'NO' END);
+   DBMS_OUTPUT.PUT_LINE('Row count: ' || emp_cur%ROWCOUNT);
+   CLOSE emp_cur;
+END;
+/
+
+
+/* ============================================================
+   SECTION 6: STORED PROCEDURES
+   ============================================================ */
+
+-- TYPE: Procedure (no parameters, basic)
+CREATE OR REPLACE PROCEDURE greet_all
+IS
+BEGIN
+   DBMS_OUTPUT.PUT_LINE('Hello from stored procedure!');
+END;
+/
+-- Execute:
+EXEC greet_all;
+
+-- TYPE: Procedure (with local variables inside)
+CREATE OR REPLACE PROCEDURE dept_summary
+IS
+   v_count NUMBER;
+   v_avg   NUMBER;
+BEGIN
+   SELECT COUNT(*), AVG(SALARY)
+   INTO   v_count, v_avg
+   FROM   employees
+   WHERE  DEPARTMENT_ID = 90;
+   DBMS_OUTPUT.PUT_LINE('Total employees: ' || v_count);
+   DBMS_OUTPUT.PUT_LINE('Average salary:  ' || ROUND(v_avg, 2));
+END;
+/
+EXEC dept_summary;
+
+-- TYPE: Procedure with IN parameter (read-only input)
+CREATE OR REPLACE PROCEDURE show_employee (
+   p_id IN NUMBER
+)
+IS
+   v_name employees.FIRST_NAME%TYPE;
+BEGIN
+   SELECT FIRST_NAME INTO v_name
+   FROM   employees
+   WHERE  EMPLOYEE_ID = p_id;
+   DBMS_OUTPUT.PUT_LINE('Employee: ' || v_name);
+END;
+/
+EXEC show_employee(100);
+EXEC show_employee(101);
+
+-- TYPE: Procedure with OUT parameter (return value to caller)
+CREATE OR REPLACE PROCEDURE get_salary (
+   p_id  IN  NUMBER,
+   p_sal OUT NUMBER
+)
+IS
+BEGIN
+   SELECT SALARY INTO p_sal
+   FROM   employees
+   WHERE  EMPLOYEE_ID = p_id;
+END;
+/
+-- Execution block to capture OUT value:
+DECLARE
+   v_salary NUMBER;
+BEGIN
+   get_salary(100, v_salary);
+   DBMS_OUTPUT.PUT_LINE('Salary: ' || v_salary);
+END;
+/
+
+-- TYPE: Procedure with IN OUT parameter (modify and return)
+CREATE OR REPLACE PROCEDURE raise_salary (
+   p_sal IN OUT NUMBER,
+   p_pct IN     NUMBER
+)
+IS
+BEGIN
+   p_sal := p_sal * (1 + p_pct / 100);
+END;
+/
+DECLARE
+   v_sal NUMBER := 5000;
+BEGIN
+   raise_salary(v_sal, 10);     -- 10% raise
+   DBMS_OUTPUT.PUT_LINE('New salary: ' || v_sal);  -- 5500
+END;
+/
+
+-- TYPE: Procedure with DEFAULT parameter (optional argument)
+CREATE OR REPLACE PROCEDURE insert_location (
+   p_street  IN VARCHAR2,
+   p_city    IN VARCHAR2,
+   p_country IN CHAR,
+   p_zip     IN VARCHAR2 DEFAULT NULL,
+   p_state   IN VARCHAR2 DEFAULT 'N/A'
+)
+IS
+   v_new_id NUMBER;
+BEGIN
+   SELECT COUNT(LOCATION_ID) + 1
+   INTO   v_new_id
+   FROM   LOCATIONS;
+   INSERT INTO LOCATIONS (
+      LOCATION_ID, STREET_ADDRESS, POSTAL_CODE,
+      CITY, STATE_PROVINCE, COUNTRY_ID
+   ) VALUES (
+      v_new_id, p_street, p_zip,
+      p_city,   p_state,  p_country
+   );
+   DBMS_OUTPUT.PUT_LINE('Inserted location ID: ' || v_new_id);
+END;
+/
+-- Without optional params:
+EXEC insert_location('DHA', 'Karachi', 'PK');
+-- With all params using named association (=> operator):
+EXEC insert_location('DHA', 'Karachi', 'PK', p_zip => '75500', p_state => 'Sindh');
+
+-- TYPE: Procedure with full INSERT logic (lab example style)
+CREATE OR REPLACE PROCEDURE Insert_Data (
+   STREET_ADDRESS IN VARCHAR2,
+   POSTAL_CODE    IN VARCHAR2 DEFAULT NULL,
+   CITY           IN VARCHAR2,
+   STATE_PROVINCE IN VARCHAR2,
+   COUNTRY_ID     IN CHAR
+)
+IS
+   total_record NUMBER;
+   location_id  NUMBER;
+BEGIN
+   SELECT COUNT(LOCATION_ID) + 1
+   INTO   location_id
+   FROM   LOCATIONS;
+   total_record := location_id;
+   INSERT INTO LOCATIONS (
+      LOCATION_ID, STREET_ADDRESS, POSTAL_CODE,
+      CITY, STATE_PROVINCE, COUNTRY_ID
+   ) VALUES (
+      location_id, STREET_ADDRESS, POSTAL_CODE,
+      CITY,        STATE_PROVINCE, COUNTRY_ID
+   );
+   DBMS_OUTPUT.PUT_LINE('New record inserted with ID: ' || location_id);
+   DBMS_OUTPUT.PUT_LINE('Total records: ' || total_record);
+END;
+/
+EXEC Insert_Data('DHA', '1234', 'KARACHI', 'SINDH', 'PK');
+
+-- TYPE: Drop a procedure
+-- DROP PROCEDURE greet_all;
+
+
+/* ============================================================
+   SECTION 7: EXCEPTION HANDLING
+   ============================================================ */
+
+-- TYPE: NO_DATA_FOUND (zero rows returned by SELECT INTO)
+DECLARE
+   v_sal employees.SALARY%TYPE;
+BEGIN
+   SELECT SALARY INTO v_sal
+   FROM   employees
+   WHERE  EMPLOYEE_ID = 9999;    -- does not exist
+   DBMS_OUTPUT.PUT_LINE('Salary: ' || v_sal);
+EXCEPTION
+   WHEN NO_DATA_FOUND THEN
+      DBMS_OUTPUT.PUT_LINE('Error: Employee not found');
+END;
+/
+
+-- TYPE: TOO_MANY_ROWS (SELECT INTO returns more than 1 row)
+DECLARE
+   v_sal employees.SALARY%TYPE;
+BEGIN
+   SELECT SALARY INTO v_sal
+   FROM   employees;             -- no WHERE, returns all rows
+   DBMS_OUTPUT.PUT_LINE('Salary: ' || v_sal);
+EXCEPTION
+   WHEN TOO_MANY_ROWS THEN
+      DBMS_OUTPUT.PUT_LINE('Error: Query returned multiple rows');
+END;
+/
+
+-- TYPE: DUP_VAL_ON_INDEX (insert duplicate primary key)
+DECLARE
+   v_id employees.EMPLOYEE_ID%TYPE := 100;
+BEGIN
+   INSERT INTO employees (EMPLOYEE_ID, FIRST_NAME, LAST_NAME,
+                          EMAIL, HIRE_DATE, JOB_ID)
+   VALUES (v_id, 'Test', 'User', 'TUSER', SYSDATE, 'IT_PROG');
+EXCEPTION
+   WHEN DUP_VAL_ON_INDEX THEN
+      DBMS_OUTPUT.PUT_LINE('Error: Duplicate employee ID ' || v_id);
+END;
+/
+
+-- TYPE: WHEN OTHERS with SQLERRM and SQLCODE (catch-all)
+DECLARE
+   v_sal employees.SALARY%TYPE;
+BEGIN
+   SELECT SALARY INTO v_sal
+   FROM   employees WHERE EMPLOYEE_ID = 9999;
+   DBMS_OUTPUT.PUT_LINE(v_sal);
+EXCEPTION
+   WHEN NO_DATA_FOUND THEN
+      DBMS_OUTPUT.PUT_LINE('No employee found');
+   WHEN TOO_MANY_ROWS THEN
+      DBMS_OUTPUT.PUT_LINE('Multiple rows returned');
+   WHEN OTHERS THEN
+      DBMS_OUTPUT.PUT_LINE('Error code: '    || SQLCODE);
+      DBMS_OUTPUT.PUT_LINE('Error message: ' || SQLERRM);
+END;
+/
+
+-- TYPE: User-defined exception (DECLARE + RAISE + WHEN)
+DECLARE
+   low_salary  EXCEPTION;
+   v_sal       employees.SALARY%TYPE;
+BEGIN
+   SELECT SALARY INTO v_sal
+   FROM   employees WHERE EMPLOYEE_ID = 100;
+   IF v_sal < 5000 THEN
+      RAISE low_salary;
+   END IF;
+   DBMS_OUTPUT.PUT_LINE('Salary is OK: ' || v_sal);
+EXCEPTION
+   WHEN low_salary THEN
+      DBMS_OUTPUT.PUT_LINE('Error: Salary below minimum threshold');
+END;
+/
+
+-- TYPE: Exception inside a stored procedure (safe get)
+CREATE OR REPLACE PROCEDURE safe_get_salary (
+   p_id  IN  NUMBER,
+   p_sal OUT NUMBER
+)
+IS
+BEGIN
+   SELECT SALARY INTO p_sal
+   FROM   employees
+   WHERE  EMPLOYEE_ID = p_id;
+EXCEPTION
+   WHEN NO_DATA_FOUND THEN
+      p_sal := -1;
+      DBMS_OUTPUT.PUT_LINE('No employee with ID: ' || p_id);
+   WHEN OTHERS THEN
+      p_sal := -1;
+      DBMS_OUTPUT.PUT_LINE('Error: ' || SQLERRM);
+END;
+/
+DECLARE
+   v_sal NUMBER;
+BEGIN
+   safe_get_salary(9999, v_sal);
+   IF v_sal = -1 THEN
+      DBMS_OUTPUT.PUT_LINE('Could not get salary');
+   ELSE
+      DBMS_OUTPUT.PUT_LINE('Salary: ' || v_sal);
+   END IF;
+END;
+/
+
+
+/* ============================================================
+   QUICK REFERENCE -- OPERATORS AND KEYWORDS
+   ============================================================
+   :=        assignment             (x := 10)
+   =         comparison             (IF x = 10)
+   ||        concatenation          ('A' || 'B')
+   **        exponentiation         (2**8 = 256)
+   ..        range                  (FOR i IN 1..5)
+   =>        named association      (p_id => 100)
+   %TYPE     column type anchor     (employees.SALARY%TYPE)
+   %ROWTYPE  row type anchor        (employees%ROWTYPE)
+   NVL(x,d) null substitute        (NVL(comm, 0))
+   SYSDATE   current date/time
+   ROUND(n,d) round to d decimals
+   BETWEEN   inclusive range        (x BETWEEN 10 AND 20)
+
+   CURSOR ATTRIBUTES:
+   %FOUND      last fetch returned a row
+   %NOTFOUND   last fetch returned no row
+   %ROWCOUNT   number of rows fetched so far
+   %ISOPEN     TRUE if cursor is currently open
+
+   IMPLICIT CURSOR (after DML):
+   SQL%ROWCOUNT   rows affected by last DML
+   SQL%FOUND      TRUE if rows were affected
+   SQL%NOTFOUND   TRUE if no rows affected
+
+   COMMON EXCEPTIONS:
+   NO_DATA_FOUND       SELECT INTO returned 0 rows
+   TOO_MANY_ROWS       SELECT INTO returned > 1 row
+   DUP_VAL_ON_INDEX    duplicate key on unique/PK
+   VALUE_ERROR         wrong type or size
+   ZERO_DIVIDE         division by zero
+   OTHERS              catch-all (always last)
+   ============================================================ */
