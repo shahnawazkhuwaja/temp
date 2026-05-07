@@ -1,0 +1,1208 @@
+================================================================================
+SECTION 1 — DATA MODELS (THEORY)
+================================================================================
+
+A data model defines how data is structured, stored, and manipulated.
+
+Types of Data Models:
+  - Hierarchical   : Tree structure, parent-child relationships
+  - Network        : Graph structure, many-to-many via pointers
+  - Relational      : Tables with rows/columns, SQL-based (Oracle, MySQL)
+  - Document/NoSQL  : JSON-like documents, e.g. MongoDB, no fixed schema
+  - ER Model        : Conceptual model using entities and relationships
+
+--------------------------------------------------------------------------------
+RDBMS vs MongoDB Terminology — MEMORIZE THIS:
+--------------------------------------------------------------------------------
+
+  RDBMS              |  MongoDB
+  -------------------|---------------------------
+  Database           |  Database
+  Table              |  Collection
+  Row / Tuple        |  Document
+  Column             |  Field
+  Table Join         |  Embedded Document
+  Primary Key        |  _id (auto-provided)
+  mysqld / Oracle    |  mongod (server)
+  mysql / sqlplus    |  mongo / mongosh (shell)
+
+================================================================================
+SECTION 2 — Q1: ER MODEL + RELATIONAL SCHEMA (DDL)
+================================================================================
+
+HOW TO APPROACH ANY SCENARIO:
+  Step 1 — Read paragraph, identify ENTITIES (nouns)
+  Step 2 — Identify ATTRIBUTES (properties of each entity)
+  Step 3 — Identify RELATIONSHIPS between entities
+  Step 4 — Determine cardinality: 1:1, 1:N, or M:N
+  Step 5 — Write CREATE TABLE with PKs, FKs, constraints
+
+CARDINALITY RULES:
+  1:N  → FK goes in the MANY side table
+  M:N  → Create a JUNCTION/BRIDGE table with composite PK
+  1:1  → FK goes in the weaker entity
+
+--------------------------------------------------------------------------------
+TODAY'S EXAM Q1 SOLUTION — Smart Agriculture Monitoring System
+--------------------------------------------------------------------------------
+
+Entities: FARMING_ZONE, FARMER, CROP, EQUIPMENT, HARVEST, DISTRIBUTION_CENTER
+M:N Relationships: Farmer-Zone, Crop-Zone, Zone-DistributionCenter
+
+-- Step 1: FARMING_ZONE
+CREATE TABLE FARMING_ZONE (
+    zone_code       VARCHAR2(10)    PRIMARY KEY,
+    zone_name       VARCHAR2(50)    NOT NULL,
+    climate_type    VARCHAR2(30),
+    soil_quality    VARCHAR2(20),
+    total_area      NUMBER(10,2)
+);
+
+-- Step 2: FARMER
+CREATE TABLE FARMER (
+    farmer_id       NUMBER          PRIMARY KEY,
+    farmer_name     VARCHAR2(50)    NOT NULL,
+    experience      NUMBER,
+    contact         VARCHAR2(15)
+);
+
+-- Step 3: FARMER_ZONE (M:N junction table)
+CREATE TABLE FARMER_ZONE (
+    farmer_id       NUMBER,
+    zone_code       VARCHAR2(10),
+    start_date      DATE,
+    PRIMARY KEY (farmer_id, zone_code),
+    FOREIGN KEY (farmer_id)  REFERENCES FARMER(farmer_id),
+    FOREIGN KEY (zone_code)  REFERENCES FARMING_ZONE(zone_code)
+);
+
+-- Step 4: CROP
+CREATE TABLE CROP (
+    crop_id         NUMBER          PRIMARY KEY,
+    crop_name       VARCHAR2(50)    NOT NULL,
+    season          VARCHAR2(20),
+    growth_duration NUMBER
+);
+
+-- Step 5: ZONE_CROP (M:N junction table)
+CREATE TABLE ZONE_CROP (
+    zone_code       VARCHAR2(10),
+    crop_id         NUMBER,
+    PRIMARY KEY (zone_code, crop_id),
+    FOREIGN KEY (zone_code) REFERENCES FARMING_ZONE(zone_code),
+    FOREIGN KEY (crop_id)   REFERENCES CROP(crop_id)
+);
+
+-- Step 6: EQUIPMENT (belongs to ONE zone — 1:N)
+CREATE TABLE EQUIPMENT (
+    equipment_id    NUMBER          PRIMARY KEY,
+    eq_type         VARCHAR2(30),
+    purpose         VARCHAR2(50),
+    status          VARCHAR2(20),
+    zone_code       VARCHAR2(10),
+    FOREIGN KEY (zone_code) REFERENCES FARMING_ZONE(zone_code)
+);
+
+-- Step 7: HARVEST
+CREATE TABLE HARVEST (
+    harvest_id      NUMBER          PRIMARY KEY,
+    harvest_date    DATE,
+    quantity        NUMBER(10,2),
+    quality_grade   VARCHAR2(5),
+    crop_id         NUMBER,
+    zone_code       VARCHAR2(10),
+    FOREIGN KEY (crop_id)   REFERENCES CROP(crop_id),
+    FOREIGN KEY (zone_code) REFERENCES FARMING_ZONE(zone_code)
+);
+
+-- Step 8: DISTRIBUTION_CENTER
+CREATE TABLE DISTRIBUTION_CENTER (
+    center_id       NUMBER          PRIMARY KEY,
+    location        VARCHAR2(50),
+    capacity        NUMBER,
+    manager         VARCHAR2(50)
+);
+
+-- Step 9: ZONE_DISTRIBUTION (M:N junction table)
+CREATE TABLE ZONE_DISTRIBUTION (
+    zone_code       VARCHAR2(10),
+    center_id       NUMBER,
+    PRIMARY KEY (zone_code, center_id),
+    FOREIGN KEY (zone_code)  REFERENCES FARMING_ZONE(zone_code),
+    FOREIGN KEY (center_id)  REFERENCES DISTRIBUTION_CENTER(center_id)
+);
+
+KEY RULES TO REMEMBER:
+  - 1:N  → FK goes in the MANY side (EQUIPMENT has zone_code FK)
+  - M:N  → Always create junction table with composite PK
+  - Always use NOT NULL on name/ID columns
+  - Junction table PK = combination of both FKs
+  - NOTE: Exam says submit Logical (ER diagram) AND Relational (DDL) separately
+
+================================================================================
+SECTION 3 — Q2: MONGODB
+================================================================================
+
+SENTENCE TO COMMAND MAPPING — READ THE SCENARIO AND MATCH:
+
+  "checks available databases"                   -->  show dbs
+  "switches to a working database"               -->  use database_name
+  "collection is created"                        -->  db.createCollection("name")
+  "stores a single record"                       -->  db.col.insertOne({...})
+  "stores multiple records"                      -->  db.col.insertMany([{...},{...}])
+  "displays all data to verify"                  -->  db.col.find()
+  "retrieves in descending order"                -->  db.col.find({}).sort({field: -1})
+  "retrieves in ascending order"                 -->  db.col.find({}).sort({field: 1})
+  "filters records NOT belonging to X"           -->  db.col.find({field: {$ne: "X"}})
+  "updated / reassigned"                         -->  db.col.updateOne({filter},{$set:{...}})
+  "rechecks updated records"                     -->  db.col.find({status: "treated"})
+  "display only selected fields"                 -->  db.col.find({},{field:1,_id:0})
+  "grouping and calculating average"             -->  db.col.aggregate([{$group:{...}}])
+  "drop collection"                              -->  db.col.drop()
+  "drop database"                                -->  db.dropDatabase()
+
+--------------------------------------------------------------------------------
+TODAY'S EXAM Q2 SOLUTION — Water Quality System
+Collection: water_quality
+Attributes: sample_id, zone, pollution_level, contamination_type,
+            status, officer_id, officer_name, designation
+--------------------------------------------------------------------------------
+
+-- 1. Check databases and switch
+show dbs
+use smart_city_db
+
+-- 2. Create collection
+db.createCollection("water_quality")
+
+-- 3. Insert newly appointed officer record (insertOne)
+db.water_quality.insertOne({
+    sample_id: 1,
+    zone: "North River Zone",
+    pollution_level: 8.5,
+    contamination_type: "Chemical",
+    status: "polluted",
+    officer_id: 101,
+    officer_name: "Dr. Ahmed",
+    designation: "Environmental Officer"
+})
+
+-- 4. Insert multiple water samples (insertMany)
+db.water_quality.insertMany([
+    {
+        sample_id: 2,
+        zone: "North River Zone",
+        pollution_level: 9.2,
+        contamination_type: "Industrial",
+        status: "polluted",
+        officer_id: 101,
+        officer_name: "Dr. Ahmed",
+        designation: "Environmental Officer"
+    },
+    {
+        sample_id: 3,
+        zone: "South Zone",
+        pollution_level: 4.1,
+        contamination_type: "Agricultural",
+        status: "moderate",
+        officer_id: 102,
+        officer_name: "Ms. Sara",
+        designation: "Field Officer"
+    },
+    {
+        sample_id: 4,
+        zone: "Central Zone",
+        pollution_level: 6.3,
+        contamination_type: "Chemical",
+        status: "polluted",
+        officer_id: 103,
+        officer_name: "Mr. Ali",
+        designation: "Senior Officer"
+    }
+])
+
+-- 5. Display all stored data to verify
+db.water_quality.find()
+
+-- 6. North River Zone records in DESCENDING order of pollution_level
+db.water_quality.find(
+    { zone: "North River Zone" }
+).sort({ pollution_level: -1 })
+
+-- 7. Filter records NOT from South Zone
+db.water_quality.find({ zone: { $ne: "South Zone" } })
+
+-- 8. Update polluted sample — mark treated, reassign zone
+db.water_quality.updateOne(
+    { zone: "North River Zone", status: "polluted" },
+    { $set: { status: "treated", zone: "Central Treatment Unit" } }
+)
+
+-- 9. Recheck updated records
+db.water_quality.find({ status: "treated" })
+
+-- 10. Projection — only selected fields, no _id
+db.water_quality.find(
+    {},
+    { sample_id: 1, zone: 1, pollution_level: 1, status: 1, _id: 0 }
+)
+
+-- 11. Aggregation — group by pollution_level, calculate average
+db.water_quality.aggregate([
+    {
+        $group: {
+            _id: "$pollution_level",
+            avg_contamination: { $avg: "$pollution_level" },
+            count: { $sum: 1 }
+        }
+    }
+])
+
+--------------------------------------------------------------------------------
+ALL MONGODB OPERATORS — QUICK REFERENCE
+--------------------------------------------------------------------------------
+
+  $gt       Greater than           {salary: {$gt: 5000}}
+  $gte      Greater than or equal  {age: {$gte: 18}}
+  $lt       Less than              {score: {$lt: 90}}
+  $lte      Less than or equal     {score: {$lte: 90}}
+  $ne       Not equal              {zone: {$ne: "South"}}
+  $and      AND condition          {$and: [{f1:v1},{f2:v2}]}
+  $or       OR condition           {$or: [{f1:v1},{f2:v2}]}
+  $set      Set field value        {$set: {field: value}}
+  $inc      Increment value        {$inc: {score: 5}}
+  $avg      Average (aggregate)    {$avg: "$field"}
+  $sum      Sum/Count (aggregate)  {$sum: 1}
+  $group    Group documents        {$group: {_id: "$field"}}
+  $regex    Pattern match          {name: {$regex: "^A", $options: "i"}}
+
+--------------------------------------------------------------------------------
+MORE MONGODB COMMANDS
+--------------------------------------------------------------------------------
+
+-- Sorting
+db.col.find().sort({ field: -1 })        -- descending
+db.col.find().sort({ field: 1 })         -- ascending
+db.col.find().sort({ f1: -1, f2: 1 })   -- multi-sort
+
+-- Limiting and Skipping
+db.col.find().limit(5)                   -- first 5 results
+db.col.find().skip(3)                    -- skip first 3
+db.col.find().skip(5).limit(5)           -- page 2 (5 per page)
+
+-- Count
+db.col.countDocuments()
+db.col.countDocuments({ score: { $gt: 80 } })
+
+-- Update
+db.col.updateOne({filter}, {$set: {field: value}})
+db.col.updateMany({filter}, {$set: {field: value}})
+db.col.updateOne({name: "Ali"}, {$inc: {score: 5}})
+
+-- Delete
+db.col.deleteOne({name: "Ali"})
+db.col.deleteMany({score: {$lt: 60}})
+
+-- Find and modify atomically
+db.col.findOneAndUpdate(
+    {name: "Ali"},
+    {$set: {score: 100}},
+    {returnNewDocument: true}
+)
+db.col.findOneAndDelete({name: "Ahmed"})
+
+-- Text search
+db.col.createIndex({ title: "text", author: "text" })
+db.col.find({ $text: { $search: "Road" } })
+
+-- Regex
+db.col.find({ title: { $regex: "^The", $options: "i" } })
+db.col.find({ author: { $regex: "Lee$", $options: "i" } })
+
+-- AND + OR combined
+db.col.find({
+    $and: [
+        { score: { $gte: 80 } },
+        { $or: [{ name: "Ali" }, { name: "Sara" }] }
+    ]
+})
+
+-- Aggregation examples
+db.col.aggregate([
+    { $group: { _id: null, avgScore: { $avg: "$score" } } }
+])
+
+db.col.aggregate([
+    { $group: { _id: "$age", count: { $sum: 1 } } },
+    { $sort: { count: -1 } }
+])
+
+-- Drop
+db.col.drop()
+db.dropDatabase()
+
+================================================================================
+SECTION 4 — Q3: ADVANCED SQL (HR SCHEMA)
+================================================================================
+
+HR SCHEMA TABLES:
+  employees    : EMPLOYEE_ID, FIRST_NAME, LAST_NAME, EMAIL, SALARY,
+                 JOB_ID, DEPARTMENT_ID, HIRE_DATE, MANAGER_ID, COMMISSION_PCT
+  departments  : DEPARTMENT_ID, DEPARTMENT_NAME, MANAGER_ID, LOCATION_ID
+  jobs         : JOB_ID, JOB_TITLE, MIN_SALARY, MAX_SALARY
+  locations    : LOCATION_ID, STREET_ADDRESS, CITY, STATE_PROVINCE, COUNTRY_ID
+  countries    : COUNTRY_ID, COUNTRY_NAME, REGION_ID
+  regions      : REGION_ID, REGION_NAME
+
+--------------------------------------------------------------------------------
+TODAY'S EXAM Q3 SOLUTIONS
+--------------------------------------------------------------------------------
+
+-- Q3.1: Subquery — employees earning more than max salary in OTHER departments
+--        Also display job title and department location
+
+SELECT e.EMPLOYEE_ID, e.FIRST_NAME, e.LAST_NAME,
+       j.JOB_TITLE, l.CITY
+FROM employees e
+JOIN jobs j        ON e.JOB_ID = j.JOB_ID
+JOIN departments d ON e.DEPARTMENT_ID = d.DEPARTMENT_ID
+JOIN locations l   ON d.LOCATION_ID = l.LOCATION_ID
+WHERE e.SALARY > (
+    SELECT MAX(e2.SALARY)
+    FROM employees e2
+    WHERE e2.DEPARTMENT_ID != e.DEPARTMENT_ID
+);
+
+-- Q3.2: JOIN — employees with active job + dept in approved region
+
+SELECT e.EMPLOYEE_ID, e.FIRST_NAME, e.LAST_NAME,
+       j.JOB_TITLE, d.DEPARTMENT_NAME, l.CITY, c.COUNTRY_NAME
+FROM employees e
+JOIN jobs j        ON e.JOB_ID = j.JOB_ID
+JOIN departments d ON e.DEPARTMENT_ID = d.DEPARTMENT_ID
+JOIN locations l   ON d.LOCATION_ID = l.LOCATION_ID
+JOIN countries c   ON l.COUNTRY_ID = c.COUNTRY_ID
+WHERE e.JOB_ID IS NOT NULL
+  AND c.REGION_ID IN (1, 2);
+
+-- Q3.3: Correlated Subquery — salary > at least one in same dept,
+--        but < max salary in same dept
+
+SELECT e.EMPLOYEE_ID, e.FIRST_NAME, e.SALARY, e.DEPARTMENT_ID
+FROM employees e
+WHERE e.SALARY > (
+    SELECT MIN(e2.SALARY)
+    FROM employees e2
+    WHERE e2.DEPARTMENT_ID = e.DEPARTMENT_ID   -- correlated (references outer)
+      AND e2.EMPLOYEE_ID  != e.EMPLOYEE_ID
+)
+AND e.SALARY < (
+    SELECT MAX(e3.SALARY)
+    FROM employees e3
+    WHERE e3.DEPARTMENT_ID = e.DEPARTMENT_ID   -- correlated (references outer)
+);
+
+-- Q3.4: Salary within range (above min, below max of dept) + dept name + region
+
+SELECT e.EMPLOYEE_ID, e.FIRST_NAME, e.SALARY,
+       d.DEPARTMENT_NAME, l.CITY
+FROM employees e
+JOIN departments d ON e.DEPARTMENT_ID = d.DEPARTMENT_ID
+JOIN locations l   ON d.LOCATION_ID = l.LOCATION_ID
+WHERE e.SALARY > (
+    SELECT MIN(e2.SALARY)
+    FROM employees e2
+    WHERE e2.DEPARTMENT_ID = e.DEPARTMENT_ID
+)
+AND e.SALARY < (
+    SELECT MAX(e3.SALARY)
+    FROM employees e3
+    WHERE e3.DEPARTMENT_ID = e.DEPARTMENT_ID
+);
+
+-- Q3.5: Trigger — Employee Transfer Validation
+--        Validates new dept, prevents invalid transfers, logs to history
+
+-- Step 1: Create history table
+CREATE TABLE transfer_history (
+    transfer_id   NUMBER         PRIMARY KEY,
+    employee_id   NUMBER,
+    old_dept_id   NUMBER,
+    new_dept_id   NUMBER,
+    transfer_date DATE
+);
+
+-- Step 2: Create sequence for auto-increment ID
+CREATE SEQUENCE transfer_seq START WITH 1 INCREMENT BY 1;
+
+-- Step 3: Trigger
+CREATE OR REPLACE TRIGGER trg_employee_transfer
+BEFORE UPDATE OF DEPARTMENT_ID ON employees
+FOR EACH ROW
+DECLARE
+    v_dept_count  NUMBER;
+BEGIN
+    -- Check if new department is valid
+    SELECT COUNT(*) INTO v_dept_count
+    FROM departments
+    WHERE DEPARTMENT_ID = :NEW.DEPARTMENT_ID;
+
+    IF v_dept_count = 0 THEN
+        RAISE_APPLICATION_ERROR(-20002, 'Invalid or inactive department code');
+    END IF;
+
+    -- Record the transfer in history
+    INSERT INTO transfer_history VALUES (
+        transfer_seq.NEXTVAL,
+        :OLD.EMPLOYEE_ID,
+        :OLD.DEPARTMENT_ID,
+        :NEW.DEPARTMENT_ID,
+        SYSDATE
+    );
+END;
+/
+
+================================================================================
+SECTION 5 — Q4: PL/SQL + TRANSACTIONS (40 MARKS)
+================================================================================
+
+NOTE: This is the BIGGEST question — 40 marks. Master all 6 patterns below.
+NOTE: Always write SET SERVEROUTPUT ON; before every PL/SQL block.
+NOTE: End every PL/SQL block with / on its own line.
+
+================================================================================
+PATTERN 1 — Basic Block with FOR Loop
+================================================================================
+
+Exam trigger words: "loop through", "for each employee", "assign bonus", "display all"
+
+-- SKELETON:
+SET SERVEROUTPUT ON;
+BEGIN
+    FOR emp IN (SELECT EMPLOYEE_ID, FIRST_NAME, SALARY, JOB_ID
+                FROM employees)
+    LOOP
+        -- your logic here using emp.FIELD_NAME
+        DBMS_OUTPUT.PUT_LINE(emp.FIRST_NAME || ' : ' || emp.SALARY);
+    END LOOP;
+END;
+/
+
+--------------------------------------------------------------------------------
+TODAY'S EXAM B5 — Assign bonus based on JOB_ID
+  Managers  --> 20% bonus
+  IT staff  --> 15% bonus
+  Others    --> 10% bonus
+--------------------------------------------------------------------------------
+
+SET SERVEROUTPUT ON;
+BEGIN
+    FOR emp IN (SELECT EMPLOYEE_ID, FIRST_NAME, JOB_ID, SALARY
+                FROM employees)
+    LOOP
+        IF UPPER(emp.JOB_ID) LIKE '%MAN%' OR UPPER(emp.JOB_ID) LIKE '%MGR%' THEN
+            DBMS_OUTPUT.PUT_LINE(emp.FIRST_NAME ||
+                ' | Manager Bonus: ' || (emp.SALARY * 0.20));
+        ELSIF UPPER(emp.JOB_ID) LIKE '%IT%' THEN
+            DBMS_OUTPUT.PUT_LINE(emp.FIRST_NAME ||
+                ' | IT Bonus: ' || (emp.SALARY * 0.15));
+        ELSE
+            DBMS_OUTPUT.PUT_LINE(emp.FIRST_NAME ||
+                ' | Other Bonus: ' || (emp.SALARY * 0.10));
+        END IF;
+    END LOOP;
+END;
+/
+
+--------------------------------------------------------------------------------
+TODAY'S EXAM B2 — Find employees hired on weekend, insert into log table
+--------------------------------------------------------------------------------
+
+-- Step 1: Create log table FIRST
+CREATE TABLE weekend_hires_log (
+    employee_id  NUMBER,
+    first_name   VARCHAR2(50),
+    hire_date    DATE,
+    day_name     VARCHAR2(10)
+);
+
+-- Step 2: PL/SQL block
+SET SERVEROUTPUT ON;
+BEGIN
+    FOR emp IN (
+        SELECT EMPLOYEE_ID, FIRST_NAME, HIRE_DATE
+        FROM employees
+        WHERE TO_CHAR(HIRE_DATE, 'DY') IN ('SAT', 'SUN')
+    )
+    LOOP
+        INSERT INTO weekend_hires_log VALUES (
+            emp.EMPLOYEE_ID,
+            emp.FIRST_NAME,
+            emp.HIRE_DATE,
+            TO_CHAR(emp.HIRE_DATE, 'DAY')
+        );
+        DBMS_OUTPUT.PUT_LINE(emp.FIRST_NAME ||
+            ' hired on ' || TO_CHAR(emp.HIRE_DATE, 'DAY'));
+    END LOOP;
+    COMMIT;
+END;
+/
+
+================================================================================
+PATTERN 2 — Stored Procedure (no params or IN parameter)
+================================================================================
+
+Exam trigger words: "write a stored procedure that...", "calculate total/average"
+
+-- SKELETON:
+SET SERVEROUTPUT ON;
+CREATE OR REPLACE PROCEDURE procedure_name (
+    param1 IN datatype    -- remove this line if no parameters needed
+)
+IS
+    v_variable  datatype;
+BEGIN
+    -- logic here
+    DBMS_OUTPUT.PUT_LINE('Result: ' || v_variable);
+END;
+/
+
+EXEC procedure_name(value);
+
+--------------------------------------------------------------------------------
+TODAY'S EXAM B1 — Total and average salary per department
+--------------------------------------------------------------------------------
+
+SET SERVEROUTPUT ON;
+CREATE OR REPLACE PROCEDURE dept_salary_summary
+IS
+BEGIN
+    FOR rec IN (
+        SELECT d.DEPARTMENT_ID,
+               d.DEPARTMENT_NAME,
+               SUM(e.SALARY)           AS total_sal,
+               ROUND(AVG(e.SALARY), 2) AS avg_sal
+        FROM employees e
+        JOIN departments d ON e.DEPARTMENT_ID = d.DEPARTMENT_ID
+        GROUP BY d.DEPARTMENT_ID, d.DEPARTMENT_NAME
+    )
+    LOOP
+        DBMS_OUTPUT.PUT_LINE(
+            'Dept ID: '   || rec.DEPARTMENT_ID   ||
+            ' | Name: '   || rec.DEPARTMENT_NAME ||
+            ' | Total: '  || rec.total_sal       ||
+            ' | Avg: '    || rec.avg_sal
+        );
+    END LOOP;
+END;
+/
+
+EXEC dept_salary_summary;
+
+================================================================================
+PATTERN 3 — Stored Procedure to Remove Duplicates
+================================================================================
+
+Exam trigger words: "identifies duplicate employees", "remove duplicates keeping one"
+
+--------------------------------------------------------------------------------
+TODAY'S EXAM B4 — Find and remove duplicates by first_name + last_name
+--------------------------------------------------------------------------------
+
+SET SERVEROUTPUT ON;
+CREATE OR REPLACE PROCEDURE remove_duplicate_employees
+IS
+BEGIN
+    -- Keep only the row with the smallest EMPLOYEE_ID for each name pair
+    DELETE FROM employees
+    WHERE EMPLOYEE_ID NOT IN (
+        SELECT MIN(EMPLOYEE_ID)
+        FROM employees
+        GROUP BY FIRST_NAME, LAST_NAME
+    );
+
+    DBMS_OUTPUT.PUT_LINE('Duplicate rows removed: ' || SQL%ROWCOUNT);
+    COMMIT;
+END;
+/
+
+EXEC remove_duplicate_employees;
+
+-- KEY LINE TO MEMORIZE:
+-- WHERE primary_key NOT IN (SELECT MIN(primary_key) FROM table GROUP BY dup_cols)
+
+================================================================================
+PATTERN 4 — AFTER UPDATE Trigger (Audit/Log)
+================================================================================
+
+Exam trigger words: "AFTER UPDATE trigger on salary", "log old and new values",
+                    "store in audit table"
+
+IMPORTANT: ALWAYS create the audit table BEFORE writing the trigger!
+
+--------------------------------------------------------------------------------
+TODAY'S EXAM B3 — Salary audit trigger
+--------------------------------------------------------------------------------
+
+-- Step 1: Create audit table FIRST
+CREATE TABLE salary_audit (
+    employee_id   NUMBER,
+    old_salary    NUMBER,
+    new_salary    NUMBER,
+    update_date   DATE
+);
+
+-- Step 2: Create trigger
+CREATE OR REPLACE TRIGGER trg_salary_audit
+AFTER UPDATE OF SALARY ON employees
+FOR EACH ROW
+BEGIN
+    INSERT INTO salary_audit VALUES (
+        :OLD.EMPLOYEE_ID,
+        :OLD.SALARY,
+        :NEW.SALARY,
+        SYSDATE
+    );
+END;
+/
+
+-- Step 3: Test the trigger
+UPDATE employees SET SALARY = SALARY + 500 WHERE EMPLOYEE_ID = 100;
+
+-- Step 4: Verify audit table
+SELECT * FROM salary_audit;
+
+-- PSEUDO RECORD RULES:
+--   :NEW.column  = value AFTER the change  (INSERT and UPDATE)
+--   :OLD.column  = value BEFORE the change (UPDATE and DELETE)
+--   INSERT trigger: :OLD has NULL values
+--   UPDATE trigger: both :OLD and :NEW have values
+--   DELETE trigger: :NEW has NULL values
+
+================================================================================
+PATTERN 5 — Transaction (COMMIT / ROLLBACK)
+================================================================================
+
+Exam trigger words: "both operations together", "if any issue no record should remain",
+                    "all succeed or all fail"
+
+--------------------------------------------------------------------------------
+TODAY'S EXAM A1 — Admit patient + log entry together (both or neither)
+--------------------------------------------------------------------------------
+
+BEGIN
+    -- Operation 1: Insert new patient
+    INSERT INTO Patients (patient_id, name, status, bill_amount)
+    VALUES (1, 'Ali Khan', 'admitted', 5000);
+
+    -- Operation 2: Record in treatment log
+    INSERT INTO Treatment_Log (log_id, patient_id, activity, log_date)
+    VALUES (101, 1, 'Admission', SYSDATE);
+
+    COMMIT;  -- Both saved together
+    DBMS_OUTPUT.PUT_LINE('Patient admitted and logged successfully.');
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;  -- Both undone if any error
+        DBMS_OUTPUT.PUT_LINE('Error: ' || SQLERRM);
+END;
+/
+
+--------------------------------------------------------------------------------
+TODAY'S EXAM A2 — Update with row count check, rollback if too many affected
+--------------------------------------------------------------------------------
+
+DECLARE
+    v_count NUMBER;
+BEGIN
+    UPDATE Patients
+    SET status = 'critical review'
+    WHERE status = 'under observation';
+
+    v_count := SQL%ROWCOUNT;  -- how many rows were affected
+
+    IF v_count > 10 THEN  -- safe operational limit
+        ROLLBACK;
+        DBMS_OUTPUT.PUT_LINE('Too many rows: ' || v_count || '. Rolled back.');
+    ELSE
+        COMMIT;
+        DBMS_OUTPUT.PUT_LINE('Updated ' || v_count || ' patients successfully.');
+    END IF;
+END;
+/
+
+--------------------------------------------------------------------------------
+TODAY'S EXAM A3 — Check duplicate name before insert, cancel if found
+--------------------------------------------------------------------------------
+
+DECLARE
+    v_count  NUMBER;
+    v_name   VARCHAR2(50) := 'Ali Khan';
+BEGIN
+    -- Check if patient with same name exists
+    SELECT COUNT(*) INTO v_count
+    FROM Patients
+    WHERE name = v_name;
+
+    IF v_count > 0 THEN
+        DBMS_OUTPUT.PUT_LINE('Duplicate found. Process cancelled.');
+        ROLLBACK;
+    ELSE
+        INSERT INTO Patients VALUES (5, v_name, 'admitted', 3000);
+        COMMIT;
+        DBMS_OUTPUT.PUT_LINE('Patient added successfully.');
+    END IF;
+END;
+/
+
+--------------------------------------------------------------------------------
+TODAY'S EXAM A4 — Multiple operations all succeed or all fail together
+--------------------------------------------------------------------------------
+
+BEGIN
+    -- Action 1: Admit new patient
+    INSERT INTO Patients VALUES (6, 'Sara Malik', 'admitted', 0);
+
+    -- Action 2: Update existing patient billing
+    UPDATE Patients
+    SET bill_amount = bill_amount + 2000
+    WHERE patient_id = 3;
+
+    -- Action 3: Remove discharged patient
+    DELETE FROM Patients
+    WHERE patient_id = 2 AND status = 'discharged';
+
+    COMMIT;  -- All three succeed together
+    DBMS_OUTPUT.PUT_LINE('All operations completed successfully.');
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;  -- All three undone if any fails
+        DBMS_OUTPUT.PUT_LINE('Error: ' || SQLERRM);
+END;
+/
+
+================================================================================
+PATTERN 6 — SAVEPOINT (Checkpoint — partial rollback)
+================================================================================
+
+Exam trigger words: "defines a checkpoint after first phase",
+                    "only changes after checkpoint reversed",
+                    "keep earlier valid changes intact"
+
+--------------------------------------------------------------------------------
+TODAY'S EXAM A5 — Checkpoint after phase 1, undo only phase 2 on error
+--------------------------------------------------------------------------------
+
+BEGIN
+    -- ===== PHASE 1 =====
+    UPDATE Patients
+    SET status = 'in treatment'
+    WHERE status = 'admitted';
+
+    SAVEPOINT phase1_done;  -- CHECKPOINT created here
+    DBMS_OUTPUT.PUT_LINE('Phase 1 complete. Checkpoint set.');
+
+    -- ===== PHASE 2 =====
+    UPDATE Patients
+    SET bill_amount = bill_amount * 1.1
+    WHERE status = 'in treatment';
+
+    DELETE FROM Treatment_Log
+    WHERE log_date < SYSDATE - 30;
+
+    COMMIT;  -- Both phases saved if no error
+    DBMS_OUTPUT.PUT_LINE('All phases committed successfully.');
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK TO phase1_done;  -- Only undo PHASE 2
+        COMMIT;                   -- Keep PHASE 1
+        DBMS_OUTPUT.PUT_LINE('Phase 2 failed. Phase 1 kept intact.');
+END;
+/
+
+================================================================================
+MORE PL/SQL — Procedures with OUT and IN OUT Parameters
+================================================================================
+
+-- OUT Parameter — procedure returns a value to the caller
+CREATE OR REPLACE PROCEDURE Get_Salary (
+    e_id   IN  NUMBER,
+    e_sal  OUT NUMBER
+)
+IS
+BEGIN
+    SELECT SALARY INTO e_sal
+    FROM employees
+    WHERE EMPLOYEE_ID = e_id;
+END;
+/
+
+-- Execution — need a variable to receive OUT value
+DECLARE
+    salary NUMBER;
+BEGIN
+    Get_Salary(100, salary);
+    DBMS_OUTPUT.PUT_LINE('Salary: ' || salary);
+END;
+/
+
+-- IN OUT Parameter — pass value in, get modified value back
+CREATE OR REPLACE PROCEDURE Update_Value (
+    num IN OUT NUMBER
+)
+IS
+BEGIN
+    num := num + 10;
+END;
+/
+
+-- Execution
+DECLARE
+    val NUMBER := 50;
+BEGIN
+    Update_Value(val);
+    DBMS_OUTPUT.PUT_LINE('Updated Value: ' || val);  -- prints 60
+END;
+/
+
+================================================================================
+MORE PL/SQL — Conditional Statements
+================================================================================
+
+-- IF-THEN-ELSIF-ELSE
+SET SERVEROUTPUT ON;
+DECLARE
+    v_sal NUMBER := 8000;
+BEGIN
+    IF v_sal <= 5000 THEN
+        DBMS_OUTPUT.PUT_LINE('Low salary');
+    ELSIF v_sal <= 10000 THEN
+        DBMS_OUTPUT.PUT_LINE('Mid salary');
+    ELSIF v_sal <= 20000 THEN
+        DBMS_OUTPUT.PUT_LINE('High salary');
+    ELSE
+        DBMS_OUTPUT.PUT_LINE('Very high salary');
+    END IF;
+END;
+/
+
+-- CASE Statement
+SET SERVEROUTPUT ON;
+DECLARE
+    v_dept NUMBER := 90;
+BEGIN
+    CASE
+        WHEN v_dept = 80 THEN
+            DBMS_OUTPUT.PUT_LINE('Sales dept');
+        WHEN v_dept = 90 THEN
+            DBMS_OUTPUT.PUT_LINE('Executive dept');
+        ELSE
+            DBMS_OUTPUT.PUT_LINE('Other dept');
+    END CASE;
+END;
+/
+
+-- SELECT INTO (fetch single row into variables)
+SET SERVEROUTPUT ON;
+DECLARE
+    e_name  employees.FIRST_NAME%TYPE;
+    e_sal   employees.SALARY%TYPE;
+BEGIN
+    SELECT FIRST_NAME, SALARY
+    INTO e_name, e_sal
+    FROM employees
+    WHERE EMPLOYEE_ID = 100;
+
+    DBMS_OUTPUT.PUT_LINE('Name: ' || e_name || ' Salary: ' || e_sal);
+END;
+/
+
+-- Variable Scope (inner overrides outer)
+SET SERVEROUTPUT ON;
+DECLARE
+    x NUMBER := 10;   -- outer
+BEGIN
+    DECLARE
+        x NUMBER := 99;  -- inner, overrides outer inside this block
+    BEGIN
+        DBMS_OUTPUT.PUT_LINE(x);  -- prints 99
+    END;
+    DBMS_OUTPUT.PUT_LINE(x);  -- prints 10
+END;
+/
+
+================================================================================
+MORE TRIGGERS — All Types
+================================================================================
+
+-- BEFORE INSERT trigger
+CREATE OR REPLACE TRIGGER bi_employees
+BEFORE INSERT ON employees
+FOR EACH ROW ENABLE
+DECLARE
+    v_user VARCHAR2(30);
+BEGIN
+    SELECT user INTO v_user FROM dual;
+    DBMS_OUTPUT.PUT_LINE('Insert by: ' || v_user);
+END;
+/
+
+-- Combined INSERT/UPDATE/DELETE trigger
+CREATE OR REPLACE TRIGGER tr_employees
+BEFORE INSERT OR UPDATE OR DELETE ON employees
+FOR EACH ROW ENABLE
+DECLARE
+    v_user VARCHAR2(30);
+BEGIN
+    SELECT user INTO v_user FROM dual;
+    IF INSERTING THEN
+        DBMS_OUTPUT.PUT_LINE('Inserted by ' || v_user);
+    ELSIF UPDATING THEN
+        DBMS_OUTPUT.PUT_LINE('Updated by ' || v_user);
+    ELSIF DELETING THEN
+        DBMS_OUTPUT.PUT_LINE('Deleted by ' || v_user);
+    END IF;
+END;
+/
+
+-- Table Auditing Trigger (stores :NEW and :OLD values)
+CREATE TABLE emp_audit (
+    new_sal    NUMBER,
+    old_sal    NUMBER,
+    user_name  VARCHAR2(30),
+    entry_date VARCHAR2(30),
+    operation  VARCHAR2(20)
+);
+
+CREATE OR REPLACE TRIGGER emp_audit_tr
+BEFORE INSERT OR UPDATE OR DELETE ON employees
+FOR EACH ROW ENABLE
+DECLARE
+    v_user VARCHAR2(30);
+    v_date VARCHAR2(30);
+BEGIN
+    SELECT user, TO_CHAR(SYSDATE, 'DD/MON/YYYY HH24:MI:SS')
+    INTO v_user, v_date FROM dual;
+
+    IF INSERTING THEN
+        INSERT INTO emp_audit VALUES
+            (:NEW.SALARY, NULL, v_user, v_date, 'INSERT');
+    ELSIF DELETING THEN
+        INSERT INTO emp_audit VALUES
+            (NULL, :OLD.SALARY, v_user, v_date, 'DELETE');
+    ELSIF UPDATING THEN
+        INSERT INTO emp_audit VALUES
+            (:NEW.SALARY, :OLD.SALARY, v_user, v_date, 'UPDATE');
+    END IF;
+END;
+/
+
+-- Synchronized Backup Trigger
+CREATE TABLE employees_backup AS SELECT * FROM employees WHERE 1=2;
+
+CREATE OR REPLACE TRIGGER emp_backup_tr
+BEFORE INSERT OR UPDATE OR DELETE ON employees
+FOR EACH ROW ENABLE
+BEGIN
+    IF INSERTING THEN
+        INSERT INTO employees_backup
+        VALUES (:NEW.EMPLOYEE_ID, :NEW.FIRST_NAME, :NEW.LAST_NAME,
+                :NEW.EMAIL, :NEW.PHONE_NUMBER, :NEW.HIRE_DATE,
+                :NEW.JOB_ID, :NEW.SALARY, :NEW.COMMISSION_PCT,
+                :NEW.MANAGER_ID, :NEW.DEPARTMENT_ID);
+    ELSIF DELETING THEN
+        DELETE FROM employees_backup
+        WHERE EMPLOYEE_ID = :OLD.EMPLOYEE_ID;
+    ELSIF UPDATING THEN
+        UPDATE employees_backup
+        SET SALARY = :NEW.SALARY
+        WHERE EMPLOYEE_ID = :OLD.EMPLOYEE_ID;
+    END IF;
+END;
+/
+
+-- DDL Trigger — Schema Auditing
+CREATE TABLE schema_audit (
+    ddl_date      DATE,
+    ddl_user      VARCHAR2(30),
+    object_type   VARCHAR2(30),
+    object_name   VARCHAR2(30),
+    ddl_operation VARCHAR2(30)
+);
+
+CREATE OR REPLACE TRIGGER hr_audit_tr
+AFTER DDL ON SCHEMA
+BEGIN
+    INSERT INTO schema_audit VALUES (
+        SYSDATE,
+        SYS_CONTEXT('USERENV', 'CURRENT_USER'),
+        ORA_DICT_OBJ_TYPE,
+        ORA_DICT_OBJ_NAME,
+        ORA_SYSEVENT
+    );
+END;
+/
+
+-- DDL Trigger — Database Level (needs SYSDBA)
+CREATE OR REPLACE TRIGGER db_audit_tr
+AFTER DDL ON DATABASE
+BEGIN
+    INSERT INTO schema_audit VALUES (
+        SYSDATE,
+        SYS_CONTEXT('USERENV', 'CURRENT_USER'),
+        ORA_DICT_OBJ_TYPE,
+        ORA_DICT_OBJ_NAME,
+        ORA_SYSEVENT
+    );
+END;
+/
+
+-- Schema LOGON Trigger
+CREATE TABLE hr_evnt_audit (
+    event_type  VARCHAR2(30),
+    logon_date  DATE,
+    logon_time  VARCHAR2(15),
+    logof_date  DATE,
+    logof_time  VARCHAR2(15)
+);
+
+CREATE OR REPLACE TRIGGER hr_logon_audit
+AFTER LOGON ON SCHEMA
+BEGIN
+    INSERT INTO hr_evnt_audit
+    VALUES (ORA_SYSEVENT, SYSDATE, TO_CHAR(SYSDATE,'HH24:MI:SS'), NULL, NULL);
+    COMMIT;
+END;
+/
+
+-- Schema LOGOFF Trigger
+CREATE OR REPLACE TRIGGER log_off_audit
+BEFORE LOGOFF ON SCHEMA
+BEGIN
+    INSERT INTO hr_evnt_audit
+    VALUES (ORA_SYSEVENT, NULL, NULL, SYSDATE, TO_CHAR(SYSDATE,'HH24:MI:SS'));
+    COMMIT;
+END;
+/
+
+-- STARTUP Trigger (needs DBA)
+CREATE TABLE startup_audit (
+    event_type  VARCHAR2(15),
+    event_date  DATE,
+    event_time  VARCHAR2(15)
+);
+
+CREATE OR REPLACE TRIGGER startup_audit_tr
+AFTER STARTUP ON DATABASE
+BEGIN
+    INSERT INTO startup_audit
+    VALUES (ORA_SYSEVENT, SYSDATE, TO_CHAR(SYSDATE,'HH24:MM:SS'));
+END;
+/
+
+-- SHUTDOWN Trigger (needs DBA)
+CREATE OR REPLACE TRIGGER shutdown_audit_tr
+BEFORE SHUTDOWN ON DATABASE
+BEGIN
+    INSERT INTO startup_audit
+    VALUES (ORA_SYSEVENT, SYSDATE, TO_CHAR(SYSDATE,'HH24:MM:SS'));
+END;
+/
+
+-- INSTEAD OF INSERT Trigger (for non-updatable views)
+CREATE TABLE trainer (full_name VARCHAR2(20));
+CREATE TABLE subject (subject_name VARCHAR2(15));
+
+CREATE VIEW db_lab_view AS
+    SELECT full_name, subject_name FROM trainer, subject;
+
+CREATE OR REPLACE TRIGGER tr_io_insert
+INSTEAD OF INSERT ON db_lab_view
+FOR EACH ROW
+BEGIN
+    INSERT INTO trainer (full_name)      VALUES (:NEW.full_name);
+    INSERT INTO subject (subject_name)   VALUES (:NEW.subject_name);
+END;
+/
+
+-- INSTEAD OF UPDATE Trigger
+CREATE OR REPLACE TRIGGER tr_io_update
+INSTEAD OF UPDATE ON db_lab_view
+FOR EACH ROW
+BEGIN
+    UPDATE trainer SET full_name     = :NEW.full_name
+    WHERE full_name = :OLD.full_name;
+
+    UPDATE subject SET subject_name  = :NEW.subject_name
+    WHERE subject_name = :OLD.subject_name;
+END;
+/
+
+-- INSTEAD OF DELETE Trigger
+CREATE OR REPLACE TRIGGER tr_io_delete
+INSTEAD OF DELETE ON db_lab_view
+FOR EACH ROW
+BEGIN
+    DELETE FROM trainer WHERE full_name    = :OLD.full_name;
+    DELETE FROM subject WHERE subject_name = :OLD.subject_name;
+END;
+/
+
+================================================================================
+SECTION 6 — CRITICAL CHEAT SHEET
+================================================================================
+
+5 LINES YOU MUST MEMORIZE:
+  SQL%ROWCOUNT                              -- rows affected by last DML
+  TO_CHAR(HIRE_DATE, 'DY')                  -- SAT, SUN, MON etc.
+  TO_CHAR(SYSDATE, 'DD/MON/YYYY HH24:MI:SS')-- formatted date string
+  RAISE_APPLICATION_ERROR(-20001, 'msg')    -- throw custom error
+  :OLD.col / :NEW.col                       -- before/after values in triggers
+  FOR EACH ROW                              -- required for :OLD/:NEW
+  SQLERRM                                   -- error message in EXCEPTION block
+
+TRANSACTION KEYWORDS:
+  COMMIT                  -- permanently save all changes
+  ROLLBACK                -- undo ALL changes to last commit
+  SAVEPOINT name          -- create a named checkpoint
+  ROLLBACK TO name        -- undo only changes AFTER savepoint
+  WHEN OTHERS THEN        -- catch any exception
+  SQL%ROWCOUNT            -- number of rows affected
+
+TRIGGER TYPES SUMMARY:
+  BEFORE INSERT OR UPDATE OR DELETE ON table FOR EACH ROW  -- DML trigger
+  AFTER UPDATE OF column ON table FOR EACH ROW             -- column-specific
+  AFTER DDL ON SCHEMA                                      -- schema audit
+  AFTER DDL ON DATABASE                                    -- database audit (DBA)
+  AFTER LOGON ON SCHEMA                                    -- login trigger
+  BEFORE LOGOFF ON SCHEMA                                  -- logout trigger
+  AFTER STARTUP ON DATABASE                                -- startup (DBA)
+  BEFORE SHUTDOWN ON DATABASE                              -- shutdown (DBA)
+  INSTEAD OF INSERT ON view_name FOR EACH ROW              -- instead-of (views)
+
+PARAMETER MODES IN PROCEDURES:
+  IN      -- caller passes value IN, procedure cannot modify it
+  OUT     -- procedure sends value OUT to caller
+  IN OUT  -- value passed in AND returned modified
+
+PSEUDO RECORDS IN TRIGGERS:
+  Operation  | :NEW         | :OLD
+  -----------|--------------|-------------
+  INSERT     | new values   | NULL
+  UPDATE     | new values   | old values
+  DELETE     | NULL         | old values
+
+MONGODB KEY RULES:
+  - use dbname      -- does NOT create DB until data is inserted
+  - sort({f: -1})   -- descending
+  - sort({f:  1})   -- ascending
+  - {f: 1, _id: 0}  -- projection: include f, exclude _id
+  - Cannot mix include (1) and exclude (0) in projection
+    EXCEPT for _id which can always be set to 0
+
+DDL RULES FOR Q1:
+  - 1:N   --> FK in the MANY side
+  - M:N   --> junction table with composite PK
+  - NOT NULL on all name/important columns
+  - REFERENCES keyword for foreign keys
+  - Submit ER diagram AND DDL separately
